@@ -6,9 +6,11 @@ fuzzywuzzy
 unidecode
 python-dotenv
 python-jose
-passlib
 nltk
 email-validator==2.3.0
 python-multipart
 python-Levenshtein==0.27.1
+cffi==2.0.0
+passlib==1.7.4
+bcrypt==4.3.0
 cffi==2.0.0
