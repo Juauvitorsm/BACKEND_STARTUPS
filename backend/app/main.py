@@ -17,22 +17,22 @@ from .schemas import UserLogin
 
 
 
-try:
-    nltk.data.find('corpora/stopwords')
-except LookupError:
-    nltk.download('stopwords')
+# try:
+#     nltk.data.find('corpora/stopwords')
+# except LookupError:
+#     nltk.download('stopwords')
 
-try:
-    nltk.data.find('tokenizers/punkt')
-except LookupError:
-    nltk.download('punkt')
+# try:
+#     nltk.data.find('tokenizers/punkt')
+# except LookupError:
+#     nltk.download('punkt')
 
-try:
-    nltk.data.find('stemmers/rslp')
-except LookupError:
-    nltk.download('rslp')
+# try:
+#     nltk.data.find('stemmers/rslp')
+# except LookupError:
+#     nltk.download('rslp')
 
-# A inicialização do stemmer e das stopwords foi movida para AQUI
+
 stemmer = RSLPStemmer()
 stop_words_pt = set(stopwords.words('portuguese'))
 
@@ -63,7 +63,7 @@ def login_with_json(user_data: UserLogin, db: Session = Depends(get_db)):
     return {"access_token": access_token, "token_type": "bearer"}
 
 
-# Endpoint para login com formulário (o que você estava usando)
+
 @app.post("/token", response_model=schemas.Token)
 def login_with_form(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = db.query(models.Usuario).filter(models.Usuario.email == form_data.username).first()
