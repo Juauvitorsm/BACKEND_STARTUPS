@@ -13,6 +13,7 @@ from nltk.tokenize import word_tokenize
 
 from .database import engine, Base, get_db
 from . import models, security, schemas
+from .schemas import UserLogin
 
 
 
@@ -49,24 +50,8 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="API de Pesquisa de Startups", lifespan=lifespan)
 
 
-@app.post("/register", response_model=schemas.Token)
-def register_user(user_data: schemas.UserCreate, db: Session = Depends(get_db)):
-    db_user = db.query(models.Usuario).filter(models.Usuario.email == user_data.email).first()
-    if db_user:
-        raise HTTPException(status_code=400, detail="E-mail já cadastrado.")
-    
-    hashed_password = security.hash_password(user_data.password)
-    new_user = models.Usuario(email=user_data.email, senha_hash=hashed_password)
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
-    
-    access_token = security.create_access_token(data={"sub": new_user.email})
-    return {"access_token": access_token, "token_type": "bearer"}
-
-
-@app.post("/token", response_model=schemas.Token)
-def login_for_access_token(user_data: schemas.UserLogin, db: Session = Depends(get_db)):
+@app.post("/token/json", response_model=schemas.Token)
+def login_with_json(user_data: UserLogin, db: Session = Depends(get_db)):
     user = db.query(models.Usuario).filter(models.Usuario.email == user_data.email).first()
     if not user or not security.verify_password(user_data.password, user.senha_hash):
         raise HTTPException(
@@ -74,9 +59,23 @@ def login_for_access_token(user_data: schemas.UserLogin, db: Session = Depends(g
             detail="E-mail ou senha incorretos",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
     access_token = security.create_access_token(data={"sub": user.email})
     return {"access_token": access_token, "token_type": "bearer"}
+
+
+# Endpoint para login com formulário (o que você estava usando)
+@app.post("/token", response_model=schemas.Token)
+def login_with_form(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    user = db.query(models.Usuario).filter(models.Usuario.email == form_data.username).first()
+    if not user or not security.verify_password(form_data.password, user.senha_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="E-mail ou senha incorretos",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    access_token = security.create_access_token(data={"sub": user.email})
+    return {"access_token": access_token, "token_type": "bearer"}
+
 
 
 @app.get("/companies", response_model=List[schemas.Empresa], status_code=status.HTTP_200_OK)

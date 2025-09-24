@@ -2,36 +2,32 @@ from pydantic import BaseModel, Field, EmailStr, field_validator
 import re
 from typing import Optional
 
-class UserCreate(BaseModel):
-    email: EmailStr
+class UserBase(BaseModel):
+    email: str
+
+class UserCreate(UserBase):
     password: str = Field(min_length=4)
 
-    @field_validator('email')
-    def validate_email_domain(cls, v):
-        if not v.endswith('@mti.com'):
-            raise ValueError('O e-mail deve pertencer ao domínio @mti.com')
-        return v
-    
     @field_validator('password')
     def validate_password_complexity(cls, v):
         if not re.search(r'\d', v):
             raise ValueError('A senha deve conter pelo menos um número')
         return v
     
-    
 class UserLogin(BaseModel):
     email: str
     password: str
+    
 class Token(BaseModel):
     access_token: str
     token_type: str
 
-class User(BaseModel):
-    email: str
+class User(UserBase):
+    id: int
+    is_active: Optional[bool] = True
 
     class Config:
         from_attributes = True
-
 
 
 class Empresa(BaseModel):
