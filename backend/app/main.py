@@ -15,7 +15,7 @@ from .database import engine, Base, get_db
 from . import models, security, schemas
 
 
-
+# Garante que os recursos necessários do NLTK estão baixados
 try:
     nltk.data.find('corpora/stopwords')
 except LookupError:
@@ -26,14 +26,12 @@ try:
 except LookupError:
     nltk.download('punkt')
 
-
 try:
-    nltk.data.find('tokenizers/punkt_tab')
+    nltk.data.find('stemmers/rslp')
 except LookupError:
-    nltk.download('punkt_tab')
+    nltk.download('rslp')
 
-
-
+# A inicialização do stemmer e das stopwords foi movida para AQUI
 stemmer = RSLPStemmer()
 stop_words_pt = set(stopwords.words('portuguese'))
 
@@ -107,7 +105,6 @@ def search_companies(
 
     scored_companies = []
     
-
     normalized_query = unidecode(query).lower()
     query_tokens = [
         stemmer.stem(token)
@@ -125,7 +122,6 @@ def search_companies(
     for company in all_companies:
         search_text = f"{company.nome_da_empresa} {company.solucao} {company.setor_principal} {company.setor_secundario}"
         
-
         normalized_search_text = unidecode(search_text).lower()
         search_tokens = [
             stemmer.stem(token)
@@ -133,7 +129,6 @@ def search_companies(
             if token and token not in stop_words_pt
         ]
         
-
         match_score = 0
         for q_token in query_tokens:
             for s_token in search_tokens:
@@ -141,7 +136,6 @@ def search_companies(
                 if token_fuzz_score > 80:
                     match_score += token_fuzz_score
         
-
         overall_score = fuzz.token_set_ratio(
             ' '.join(search_tokens), ' '.join(query_tokens)
         )
