@@ -37,9 +37,29 @@ stemmer = RSLPStemmer()
 stop_words_pt = set(stopwords.words('portuguese'))
 
 
+stemmer = None
+stop_words_pt = None
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Função que gerencia o ciclo de vida da aplicação (startup/shutdown)."""
+
+
+    print("Baixando recursos do NLTK...")
+    try:
+        nltk.download('stopwords')
+        nltk.download('punkt')
+        nltk.download('rslp')
+        global stemmer
+        stemmer = RSLPStemmer()
+        global stop_words_pt
+        stop_words_pt = set(stopwords.words('portuguese'))
+        print("Recursos do NLTK baixados e inicializados com sucesso!")
+    except Exception as e:
+        print(f"Erro ao baixar ou inicializar o NLTK: {e}")
+        raise RuntimeError("Falha na inicialização do NLTK.")
+
     print("Iniciando a criação das tabelas do banco de dados...")
     Base.metadata.create_all(bind=engine)
     print("Banco de dados e tabelas criadas com sucesso!")
