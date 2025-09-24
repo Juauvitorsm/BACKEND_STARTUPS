@@ -12,5 +12,5 @@ python-multipart
 python-Levenshtein==0.27.1
 cffi==2.0.0
 passlib==1.7.4
-bcrypt==4.3.0
+bcrypt==3.2.0
 cffi==2.0.0
