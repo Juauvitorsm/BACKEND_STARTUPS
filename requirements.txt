@@ -10,3 +10,4 @@ passlib
 nltk
 email-validator==2.3.0
 python-multipart
+python-Levenshtein==0.27.1
