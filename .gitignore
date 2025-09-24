@@ -3,3 +3,7 @@ venv/
 
 
 .env
+
+*.sql
+
+startups_data.csv
