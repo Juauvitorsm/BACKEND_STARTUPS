@@ -15,7 +15,7 @@ from .database import engine, Base, get_db
 from . import models, security, schemas
 
 
-# Garante que os recursos necessários do NLTK estão baixados
+
 try:
     nltk.data.find('corpora/stopwords')
 except LookupError:
@@ -66,9 +66,9 @@ def register_user(user_data: schemas.UserCreate, db: Session = Depends(get_db)):
 
 
 @app.post("/token", response_model=schemas.Token)
-def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    user = db.query(models.Usuario).filter(models.Usuario.email == form_data.username).first()
-    if not user or not security.verify_password(form_data.password, user.senha_hash):
+def login_for_access_token(user_data: schemas.UserLogin, db: Session = Depends(get_db)):
+    user = db.query(models.Usuario).filter(models.Usuario.email == user_data.email).first()
+    if not user or not security.verify_password(user_data.password, user.senha_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="E-mail ou senha incorretos",
