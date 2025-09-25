@@ -66,6 +66,23 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="API de Pesquisa de Startups", lifespan=lifespan)
 
 
+
+@app.post("/register", response_model=schemas.Token)
+def register_user(user_data: schemas.UserCreate, db: Session = Depends(get_db)):
+    db_user = db.query(models.Usuario).filter(models.Usuario.email == user_data.email).first()
+    if db_user:
+        raise HTTPException(status_code=400, detail="E-mail já cadastrado.")
+    
+    hashed_password = security.hash_password(user_data.password)
+    new_user = models.Usuario(email=user_data.email, senha_hash=hashed_password)
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    
+    access_token = security.create_access_token(data={"sub": new_user.email})
+    return {"access_token": access_token, "token_type": "bearer"}
+
+
 @app.post("/token/json", response_model=schemas.Token)
 def login_with_json(user_data: UserLogin, db: Session = Depends(get_db)):
     user = db.query(models.Usuario).filter(models.Usuario.email == user_data.email).first()
