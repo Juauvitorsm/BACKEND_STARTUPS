@@ -3,7 +3,7 @@ import nltk
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from contextlib import asynccontextmanager
 from fuzzywuzzy import fuzz
 from unidecode import unidecode
@@ -187,6 +187,83 @@ def search_companies(
         )
     
     return results
+
+
+@app.get("/filtered_search", response_model=List[schemas.Empresa], status_code=status.HTTP_200_OK)
+def filtered_search_companies(
+    query: str,
+    fase: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: schemas.User = Depends(security.get_current_user)
+):
+    all_companies = db.query(models.Empresa).all()
+    if not all_companies:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Nenhuma empresa encontrada no sistema."
+        )
+
+    scored_companies = []
+    normalized_query = unidecode(query).lower()
+    query_tokens = [
+        stemmer.stem(token)
+        for token in word_tokenize(normalized_query, language='portuguese')
+        if token and token not in stop_words_pt
+    ]
+
+    if not query_tokens:
+
+        filtered_companies_by_phase = [
+            comp for comp in all_companies if comp.fase_da_startup == fase
+        ]
+        if not filtered_companies_by_phase:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Nenhuma startup encontrada com a sua pesquisa."
+            )
+        return filtered_companies_by_phase
+
+    for company in all_companies:
+        search_text = f"{company.nome_da_empresa} {company.solucao} {company.setor_principal} {company.setor_secundario}"
+        
+        normalized_search_text = unidecode(search_text).lower()
+        search_tokens = [
+            stemmer.stem(token)
+            for token in word_tokenize(normalized_search_text, language='portuguese')
+            if token and token not in stop_words_pt
+        ]
+        
+        match_score = 0
+        for q_token in query_tokens:
+            for s_token in search_tokens:
+                token_fuzz_score = fuzz.ratio(q_token, s_token)
+                if token_fuzz_score > 80:
+                    match_score += token_fuzz_score
+        
+        overall_score = fuzz.token_set_ratio(
+            ' '.join(search_tokens), ' '.join(query_tokens)
+        )
+        final_score = (match_score + overall_score) / 2 if (match_score + overall_score) > 0 else 0
+        
+        if final_score > 70:
+            scored_companies.append({'company': company, 'score': final_score})
+    
+    scored_companies.sort(key=lambda x: x['score'], reverse=True)
+    
+
+    if fase:
+        scored_companies = [item for item in scored_companies if item['company'].fase_da_startup == fase]
+
+    results = [item['company'] for item in scored_companies]
+
+    if not results:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Nenhuma startup encontrada com a sua pesquisa."
+        )
+    
+    return results
+
 
 
 if __name__ == "__main__":
