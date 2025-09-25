@@ -8,10 +8,15 @@ class UserBase(BaseModel):
 class UserCreate(UserBase):
     password: str = Field(min_length=4)
 
-    @field_validator('password')
-    def validate_password_complexity(cls, v):
+
+    @field_validator('email')
+    def validate_email_domain(cls, v):
         if not v.endswith('@mti.com'):
             raise ValueError('O e-mail deve terminar com @mti.com')
+        return v
+
+    @field_validator('password')
+    def validate_password_complexity(cls, v):
         if not re.search(r'\d', v):
             raise ValueError('A senha deve conter pelo menos um número')
         return v
