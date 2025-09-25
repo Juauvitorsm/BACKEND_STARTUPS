@@ -41,12 +41,12 @@ stop_words_pt = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # AQUI É O NOVO BLOCO DE LÓGICA DO NLTK
     print("Baixando e inicializando recursos do NLTK...")
     try:
         nltk.download('stopwords')
         nltk.download('punkt')
         nltk.download('rslp')
+        nltk.download('punkt_tab')
         global stemmer
         stemmer = RSLPStemmer()
         global stop_words_pt
@@ -54,7 +54,6 @@ async def lifespan(app: FastAPI):
         print("Recursos do NLTK prontos com sucesso!")
     except Exception as e:
         print(f"Erro na inicialização do NLTK: {e}")
-        # Em caso de falha, a aplicação não deve continuar.
         raise RuntimeError("Falha na inicialização do NLTK.")
 
     print("Iniciando a criação das tabelas do banco de dados...")
