@@ -10,6 +10,8 @@ class UserCreate(UserBase):
 
     @field_validator('password')
     def validate_password_complexity(cls, v):
+        if not v.endswith('@mti.com'):
+            raise ValueError('O e-mail deve terminar com @mti.com')
         if not re.search(r'\d', v):
             raise ValueError('A senha deve conter pelo menos um número')
         return v
