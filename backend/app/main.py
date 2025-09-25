@@ -274,12 +274,8 @@ def optimized_search_companies(
 ):
     all_companies = db.query(models.Empresa).all()
     if not all_companies:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Nenhuma empresa encontrada no sistema."
-        )
-    
-    # 1. Padroniza a query de busca
+        return []
+
     normalized_query = unidecode(query).lower()
     
     sector_keywords = {
@@ -294,19 +290,58 @@ def optimized_search_companies(
             identified_sector = sector
             break
             
-    # 2. Pré-filtra as empresas pelo setor padronizado
     if identified_sector:
         companies_to_search = [
             comp for comp in all_companies 
-            if unidecode(comp.setor_principal).lower() == identified_sector
+            if comp.setor_principal and unidecode(comp.setor_principal).lower() == identified_sector
         ]
-        if not companies_to_search:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Nenhuma empresa do setor '{identified_sector}' encontrada."
-            )
     else:
         companies_to_search = all_companies
+
+    if fase:
+        companies_to_search = [
+            comp for comp in companies_to_search
+            if comp.fase_da_startup and comp.fase_da_startup == fase
+        ]
+    
+    scored_companies = []
+    query_tokens = [
+        stemmer.stem(token)
+        for token in word_tokenize(normalized_query, language='portuguese')
+        if token and token not in stop_words_pt
+    ]
+    
+    if not query_tokens:
+        return [comp for comp in companies_to_search]
+    
+    for company in companies_to_search:
+        search_text = f"{company.nome_da_empresa} {company.solucao} {company.setor_principal} {company.setor_secundario} {company.fase_da_startup}"
+        normalized_search_text = unidecode(search_text).lower()
+        search_tokens = [
+            stemmer.stem(token)
+            for token in word_tokenize(normalized_search_text, language='portuguese')
+            if token and token not in stop_words_pt
+        ]
+        
+        match_score = 0
+        for q_token in query_tokens:
+            for s_token in search_tokens:
+                token_fuzz_score = fuzz.ratio(q_token, s_token)
+                if token_fuzz_score > 80:
+                    match_score += token_fuzz_score
+        
+        overall_score = fuzz.token_set_ratio(' '.join(search_tokens), ' '.join(query_tokens))
+        final_score = (match_score + overall_score) / 2 if (match_score + overall_score) > 0 else 0
+        
+        if final_score > 75:  
+            scored_companies.append({'company': company, 'score': final_score})
+    
+    scored_companies.sort(key=lambda x: x['score'], reverse=True)
+    
+    results = [item['company'] for item in scored_companies]
+
+    return results
+
 
 if __name__ == "__main__":
     uvicorn.run("backend.app.main:app", host="127.0.0.1", port=8000, reload=True)
