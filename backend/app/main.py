@@ -278,12 +278,13 @@ def optimized_search_companies(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Nenhuma empresa encontrada no sistema."
         )
-
+    
+    # 1. Padroniza a query de busca
     normalized_query = unidecode(query).lower()
     
     sector_keywords = {
-        'agronegócio': ['agro', 'agronegócio', 'milho', 'soja'],
-        'finanças': ['finanças', 'financeira', 'investimento', 'banco'],
+        'agronegocio': ['agro', 'agronegocio', 'milho', 'soja'],
+        'financas': ['financas', 'financeira', 'investimento', 'banco'],
         'martech': ['martech', 'marketing', 'ads', 'tecnologia']
     }
 
@@ -292,8 +293,8 @@ def optimized_search_companies(
         if any(keyword in normalized_query for keyword in keywords):
             identified_sector = sector
             break
-
-    # Pré-filtra as empresas pelo setor identificado
+            
+    # 2. Pré-filtra as empresas pelo setor padronizado
     if identified_sector:
         companies_to_search = [
             comp for comp in all_companies 
@@ -306,60 +307,6 @@ def optimized_search_companies(
             )
     else:
         companies_to_search = all_companies
-
-    # Aplica o filtro de fase sobre os resultados pré-filtrados
-    if fase:
-        companies_to_search = [
-            comp for comp in companies_to_search
-            if comp.fase_da_startup == fase
-        ]
-        if not companies_to_search:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Nenhuma startup encontrada com a sua pesquisa."
-            )
-    
-    scored_companies = []
-    query_tokens = [
-        stemmer.stem(token)
-        for token in word_tokenize(normalized_query, language='portuguese')
-        if token and token not in stop_words_pt
-    ]
-
-    for company in companies_to_search:
-        search_text = f"{company.nome_da_empresa} {company.solucao} {company.setor_principal} {company.setor_secundario} {company.fase_da_startup}"
-        normalized_search_text = unidecode(search_text).lower()
-        search_tokens = [
-            stemmer.stem(token)
-            for token in word_tokenize(normalized_search_text, language='portuguese')
-            if token and token not in stop_words_pt
-        ]
-        
-        match_score = 0
-        for q_token in query_tokens:
-            for s_token in search_tokens:
-                token_fuzz_score = fuzz.ratio(q_token, s_token)
-                if token_fuzz_score > 80:
-                    match_score += token_fuzz_score
-        
-        overall_score = fuzz.token_set_ratio(' '.join(search_tokens), ' '.join(query_tokens))
-        final_score = (match_score + overall_score) / 2 if (match_score + overall_score) > 0 else 0
-        
-        if final_score > 75:  
-            scored_companies.append({'company': company, 'score': final_score})
-    
-    scored_companies.sort(key=lambda x: x['score'], reverse=True)
-    
-    results = [item['company'] for item in scored_companies]
-
-    if not results:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Nenhuma startup encontrada com a sua pesquisa."
-        )
-    
-    return results
-
 
 if __name__ == "__main__":
     uvicorn.run("backend.app.main:app", host="127.0.0.1", port=8000, reload=True)
