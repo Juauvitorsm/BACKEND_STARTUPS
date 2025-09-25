@@ -279,26 +279,55 @@ def optimized_search_companies(
             detail="Nenhuma empresa encontrada no sistema."
         )
 
-    scored_companies = []
     normalized_query = unidecode(query).lower()
+    
+    sector_keywords = {
+        'agronegócio': ['agro', 'agronegócio', 'milho', 'soja'],
+        'finanças': ['finanças', 'financeira', 'investimento', 'banco'],
+        'martech': ['martech', 'marketing', 'ads', 'tecnologia']
+    }
+
+    identified_sector = None
+    for sector, keywords in sector_keywords.items():
+        if any(keyword in normalized_query for keyword in keywords):
+            identified_sector = sector
+            break
+
+    # Pré-filtra as empresas pelo setor identificado
+    if identified_sector:
+        companies_to_search = [
+            comp for comp in all_companies 
+            if unidecode(comp.setor_principal).lower() == identified_sector
+        ]
+        if not companies_to_search:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Nenhuma empresa do setor '{identified_sector}' encontrada."
+            )
+    else:
+        companies_to_search = all_companies
+
+    # Aplica o filtro de fase sobre os resultados pré-filtrados
+    if fase:
+        companies_to_search = [
+            comp for comp in companies_to_search
+            if comp.fase_da_startup == fase
+        ]
+        if not companies_to_search:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Nenhuma startup encontrada com a sua pesquisa."
+            )
+    
+    scored_companies = []
     query_tokens = [
         stemmer.stem(token)
         for token in word_tokenize(normalized_query, language='portuguese')
         if token and token not in stop_words_pt
     ]
 
-    if not query_tokens:
-        filtered_companies_by_phase = [comp for comp in all_companies if comp.fase_da_startup == fase]
-        if not filtered_companies_by_phase:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Nenhuma startup encontrada com a sua pesquisa."
-            )
-        return filtered_companies_by_phase
-
-    for company in all_companies:
+    for company in companies_to_search:
         search_text = f"{company.nome_da_empresa} {company.solucao} {company.setor_principal} {company.setor_secundario} {company.fase_da_startup}"
-        
         normalized_search_text = unidecode(search_text).lower()
         search_tokens = [
             stemmer.stem(token)
@@ -313,24 +342,14 @@ def optimized_search_companies(
                 if token_fuzz_score > 80:
                     match_score += token_fuzz_score
         
-        overall_score = fuzz.token_set_ratio(
-            ' '.join(search_tokens), ' '.join(query_tokens)
-        )
-
-        sector_boost = 0
-        if any(token in unidecode(company.setor_principal).lower() for token in query_tokens):
-            sector_boost = 20 # Bônus para empresas que correspondem ao setor na busca
+        overall_score = fuzz.token_set_ratio(' '.join(search_tokens), ' '.join(query_tokens))
+        final_score = (match_score + overall_score) / 2 if (match_score + overall_score) > 0 else 0
         
-        final_score = ((match_score + overall_score) / 2) + sector_boost if (match_score + overall_score) > 0 else 0
-        
-        if final_score > 80:  # Aumenta o limiar de score para ser mais seletivo
+        if final_score > 75:  
             scored_companies.append({'company': company, 'score': final_score})
     
     scored_companies.sort(key=lambda x: x['score'], reverse=True)
     
-    if fase:
-        scored_companies = [item for item in scored_companies if item['company'].fase_da_startup == fase]
-
     results = [item['company'] for item in scored_companies]
 
     if not results:
