@@ -1,7 +1,6 @@
 import uvicorn
 import nltk
-import warnings # <-- Mantenha esta linha
-# Adiciona o filtro GLOBAL para suprimir o UserWarning específico do sklearn
+import warnings 
 warnings.filterwarnings(
     "ignore", 
     message="The parameter 'token_pattern' will not be used since 'tokenizer' is not None", 
