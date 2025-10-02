@@ -1,18 +1,25 @@
 import uvicorn
 import nltk
+import warnings # <-- Mantenha esta linha
+# Adiciona o filtro GLOBAL para suprimir o UserWarning específico do sklearn
+warnings.filterwarnings(
+    "ignore", 
+    message="The parameter 'token_pattern' will not be used since 'tokenizer' is not None", 
+    category=UserWarning
+)
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from typing import List, Dict, Any, Optional
+from typing import List, Optional
 from contextlib import asynccontextmanager
 from fuzzywuzzy import fuzz
 from unidecode import unidecode
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
-from sklearn.feature_extraction.text import TfidfVectorizer
+from nltk.stem import RSLPStemmer 
+from sklearn.feature_extraction.text import TfidfVectorizer # <-- O aviso acontece aqui
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
-from nltk.stem import RSLPStemmer # Mantido para compatibilidade com outros endpoints
 
 from .database import engine, Base, get_db
 from . import models, security, schemas
@@ -25,19 +32,30 @@ tfidf_vectorizer = None
 company_vectors = None
 all_companies_list = None
 
+CORP_AND_COMMON_STOP_WORDS = {'empresa', 'ltda', 's.a', 'eireli', 'companhia', 'solucoes', 'inovacao', 'tecnologia', 'group', 'grupo', 'de', 'a', 'o', 'e', 'do', 'da', 'dos', 'as', 'os', 
+    'um', 'uma', 'uns', 'umas', 'para', 'na', 'no', 'em', 'por', 'foco', 'quer', 'busco', 'ramo', 'com', 'eu', 'tu', 'ele', 'ela'}
 
-# Função de Tokenização Customizada (Definida globalmente para uso no TF-IDF)
+
 def custom_tokenizer(text):
     global stop_words_pt
-    # Garante que a lista de stop words esteja disponível, ou usa um set vazio como fallback
     current_stopwords = stop_words_pt if stop_words_pt is not None else set()
     
-    # Normalização de acentos e minúsculas
     text = unidecode(text).lower()
     
-    # Tokenização e remoção de stop words
     tokens = word_tokenize(text, language='portuguese')
-    return [t for t in tokens if t not in current_stopwords and t.isalpha()] 
+    
+    final_tokens = []
+    for t in tokens:
+        if t in current_stopwords or len(t) <= 1:
+            continue
+            
+        if t.isalpha():
+            final_tokens.append(nltk.stem.RSLPStemmer().stem(t))
+            
+        elif t.isalnum(): 
+            final_tokens.append(t)
+            
+    return final_tokens
 
 
 @asynccontextmanager
@@ -47,17 +65,16 @@ async def lifespan(app: FastAPI):
     
     print("Verificando e baixando recursos do NLTK...")
     try:
-        # APLICANDO GARANTIA DE DOWNLOADS DE PONTOS
-        nltk.download('punkt_tab', quiet=True) # Recurso que estava faltando
+        nltk.download('punkt_tab', quiet=True) 
         nltk.download('punkt', quiet=True)
         nltk.download('stopwords', quiet=True)
-        nltk.download('rslp', quiet=True)
+        nltk.download('rslp', quiet=True) 
         
         stemmer = RSLPStemmer()
         stop_words_pt = set(stopwords.words('portuguese'))
+        stop_words_pt.update(CORP_AND_COMMON_STOP_WORDS)
         print("Recursos do NLTK prontos com sucesso!")
         
-        # --- PREPARAÇÃO DO ÍNDICE TF-IDF ---
         db = next(get_db())
         all_companies_list = db.query(models.Empresa).all()
         
@@ -67,14 +84,13 @@ async def lifespan(app: FastAPI):
                 for c in all_companies_list
             ]
             
-            # O TFIDFVectorizer agora usa o custom_tokenizer global
-            tfidf_vectorizer = TfidfVectorizer(tokenizer=custom_tokenizer)
+            tfidf_vectorizer = TfidfVectorizer(tokenizer=custom_tokenizer, ngram_range=(1, 2))
+                
             company_vectors = tfidf_vectorizer.fit_transform(company_texts)
             print("Índice TF-IDF criado com sucesso!")
         
     except Exception as e:
         print(f"Erro na inicialização do NLTK/TF-IDF: {e}")
-        # Se houver falha, levanta o erro para depuração
         raise RuntimeError(f"Falha na inicialização: {e}")
 
     print("Iniciando a criação das tabelas do banco de dados...")
@@ -283,32 +299,37 @@ def optimized_search_companies(
     
     scored_companies = []
     
+    RELEVANCE_THRESHOLD = 0.05 
+    
     for i, score in enumerate(cosine_scores):
         company = all_companies_list[i]
         
-        if score < 0.1: 
+        if score < RELEVANCE_THRESHOLD: 
             continue
             
         if fase and company.fase_da_startup != fase:
             continue
 
+        
         company_raw_text = f"{company.nome_da_empresa} {company.solucao} {company.setor_principal} {company.setor_secundario}"
         
-        fuzzy_tolerance_score = fuzz.token_set_ratio(unidecode(company.nome_da_empresa).lower(), normalized_query)
+        fuzzy_tolerance_score = fuzz.token_set_ratio(unidecode(company_raw_text).lower(), normalized_query)
+        
         
         tf_idf_weighted = score * 100 
-        fuzzy_bonus = fuzzy_tolerance_score * 0.15
+        
+        fuzzy_bonus = fuzzy_tolerance_score * 0.40 
         
         final_score = tf_idf_weighted + fuzzy_bonus
         
-        scored_companies.append({'company': company, 'score': final_score})
+        if final_score > 25.0: 
+              scored_companies.append({'company': company, 'score': final_score})
     
     scored_companies.sort(key=lambda x: x['score'], reverse=True)
     
     results = [item['company'] for item in scored_companies[:5]]
 
     return results
-
 
 if __name__ == "__main__":
     uvicorn.run("backend.app.main:app", host="127.0.0.1", port=8000, reload=True)
