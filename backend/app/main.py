@@ -12,6 +12,7 @@ from nltk.tokenize import word_tokenize
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
+from nltk.stem import RSLPStemmer # Mantido para compatibilidade com outros endpoints
 
 from .database import engine, Base, get_db
 from . import models, security, schemas
@@ -25,21 +26,38 @@ company_vectors = None
 all_companies_list = None
 
 
+# Função de Tokenização Customizada (Definida globalmente para uso no TF-IDF)
+def custom_tokenizer(text):
+    global stop_words_pt
+    # Garante que a lista de stop words esteja disponível, ou usa um set vazio como fallback
+    current_stopwords = stop_words_pt if stop_words_pt is not None else set()
+    
+    # Normalização de acentos e minúsculas
+    text = unidecode(text).lower()
+    
+    # Tokenização e remoção de stop words
+    tokens = word_tokenize(text, language='portuguese')
+    return [t for t in tokens if t not in current_stopwords and t.isalpha()] 
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global tfidf_vectorizer, company_vectors, all_companies_list
+    global stemmer, stop_words_pt
     
-    print("Baixando e inicializando recursos do NLTK...")
+    print("Verificando e baixando recursos do NLTK...")
     try:
-        nltk.download('stopwords')
-        nltk.download('punkt')
-        nltk.download('rslp')
+        # APLICANDO GARANTIA DE DOWNLOADS DE PONTOS
+        nltk.download('punkt_tab', quiet=True) # Recurso que estava faltando
+        nltk.download('punkt', quiet=True)
+        nltk.download('stopwords', quiet=True)
+        nltk.download('rslp', quiet=True)
         
-        global stemmer, stop_words_pt
-        stemmer = nltk.stem.RSLPStemmer()
+        stemmer = RSLPStemmer()
         stop_words_pt = set(stopwords.words('portuguese'))
         print("Recursos do NLTK prontos com sucesso!")
         
+        # --- PREPARAÇÃO DO ÍNDICE TF-IDF ---
         db = next(get_db())
         all_companies_list = db.query(models.Empresa).all()
         
@@ -49,17 +67,15 @@ async def lifespan(app: FastAPI):
                 for c in all_companies_list
             ]
             
-            def custom_tokenizer(text):
-                tokens = word_tokenize(text, language='portuguese')
-                return [t for t in tokens if t not in stop_words_pt and t.isalpha()] 
-
+            # O TFIDFVectorizer agora usa o custom_tokenizer global
             tfidf_vectorizer = TfidfVectorizer(tokenizer=custom_tokenizer)
             company_vectors = tfidf_vectorizer.fit_transform(company_texts)
             print("Índice TF-IDF criado com sucesso!")
         
     except Exception as e:
         print(f"Erro na inicialização do NLTK/TF-IDF: {e}")
-        raise RuntimeError("Falha na inicialização.")
+        # Se houver falha, levanta o erro para depuração
+        raise RuntimeError(f"Falha na inicialização: {e}")
 
     print("Iniciando a criação das tabelas do banco de dados...")
     try:
@@ -278,7 +294,7 @@ def optimized_search_companies(
 
         company_raw_text = f"{company.nome_da_empresa} {company.solucao} {company.setor_principal} {company.setor_secundario}"
         
-        fuzzy_tolerance_score = fuzz.token_set_ratio(unidecode(company_raw_text).lower(), normalized_query)
+        fuzzy_tolerance_score = fuzz.token_set_ratio(unidecode(company.nome_da_empresa).lower(), normalized_query)
         
         tf_idf_weighted = score * 100 
         fuzzy_bonus = fuzzy_tolerance_score * 0.15
