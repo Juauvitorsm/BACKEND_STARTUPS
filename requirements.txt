@@ -6,6 +6,8 @@ fuzzywuzzy
 unidecode
 python-dotenv
 python-jose
+scikit-learn
+numpy
 nltk
 email-validator==2.3.0
 python-multipart
