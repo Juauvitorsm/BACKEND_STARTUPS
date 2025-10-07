@@ -34,7 +34,7 @@ initialize_nlp_resources()
 
 def custom_tokenizer(text):
     text = unidecode(text).lower()
-    tokens = word_tokenize(text, language='portuguese')
+    tokens = word_tokenize(text) # CORREÇÃO AQUI: Sem 'language=portuguese'
     final_tokens = []
     for t in tokens:
         if t in stop_words_pt or len(t) <= 1:
