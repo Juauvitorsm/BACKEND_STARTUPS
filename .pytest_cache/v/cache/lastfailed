@@ -1,0 +1,4 @@
+{
+  "backend/tests/test_search_simple.py::test_optimized_search_logic_metrics[Teste 4: Busca por Fase (Deve achar #2)]": true,
+  "backend/tests/test_search_simple.py::test_optimized_search_logic_metrics[Teste 1: Busca AGROTECH (Deve achar #1 e #2)]": true
+}

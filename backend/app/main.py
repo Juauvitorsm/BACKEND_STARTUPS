@@ -11,56 +11,18 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from contextlib import asynccontextmanager
-from fuzzywuzzy import fuzz
-from unidecode import unidecode
-from nltk.corpus import stopwords
-from nltk.tokenize import word_tokenize
-from nltk.stem import RSLPStemmer 
-from sklearn.feature_extraction.text import TfidfVectorizer # <-- O aviso acontece aqui
-from sklearn.metrics.pairwise import cosine_similarity
-import numpy as np
 
+from .search_engine import SearchEngine
 from .database import engine, Base, get_db
 from . import models, security, schemas
 from .schemas import UserLogin
 
-
-stemmer = None
-stop_words_pt = None
-tfidf_vectorizer = None
-company_vectors = None
-all_companies_list = None
-
-CORP_AND_COMMON_STOP_WORDS = {'empresa', 'ltda', 's.a', 'eireli', 'companhia', 'solucoes', 'inovacao', 'tecnologia', 'group', 'grupo', 'de', 'a', 'o', 'e', 'do', 'da', 'dos', 'as', 'os', 
-    'um', 'uma', 'uns', 'umas', 'para', 'na', 'no', 'em', 'por', 'foco', 'quer', 'busco', 'ramo', 'com', 'eu', 'tu', 'ele', 'ela'}
-
-
-def custom_tokenizer(text):
-    global stop_words_pt
-    current_stopwords = stop_words_pt if stop_words_pt is not None else set()
-    
-    text = unidecode(text).lower()
-    
-    tokens = word_tokenize(text, language='portuguese')
-    
-    final_tokens = []
-    for t in tokens:
-        if t in current_stopwords or len(t) <= 1:
-            continue
-            
-        if t.isalpha():
-            final_tokens.append(nltk.stem.RSLPStemmer().stem(t))
-            
-        elif t.isalnum(): 
-            final_tokens.append(t)
-            
-    return final_tokens
+search_engine_instance: Optional[SearchEngine] = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global tfidf_vectorizer, company_vectors, all_companies_list
-    global stemmer, stop_words_pt
+    global search_engine_instance
     
     print("Verificando e baixando recursos do NLTK...")
     try:
@@ -69,23 +31,13 @@ async def lifespan(app: FastAPI):
         nltk.download('stopwords', quiet=True)
         nltk.download('rslp', quiet=True) 
         
-        stemmer = RSLPStemmer()
-        stop_words_pt = set(stopwords.words('portuguese'))
-        stop_words_pt.update(CORP_AND_COMMON_STOP_WORDS)
         print("Recursos do NLTK prontos com sucesso!")
         
         db = next(get_db())
         all_companies_list = db.query(models.Empresa).all()
         
         if all_companies_list:
-            company_texts = [
-                unidecode(f"{c.nome_da_empresa} {c.solucao} {c.setor_principal} {c.setor_secundario}").lower()
-                for c in all_companies_list
-            ]
-            
-            tfidf_vectorizer = TfidfVectorizer(tokenizer=custom_tokenizer, ngram_range=(1, 2))
-                
-            company_vectors = tfidf_vectorizer.fit_transform(company_texts)
+            search_engine_instance = SearchEngine(all_companies_list)
             print("Índice TF-IDF criado com sucesso!")
         
     except Exception as e:
@@ -158,176 +110,29 @@ def list_all_companies(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Nenhuma empresa encontrada no sistema.")
     return results
 
-@app.get("/search", response_model=List[schemas.Empresa], status_code=status.HTTP_200_OK)
-def search_companies(
-    query: str,
-    db: Session = Depends(get_db),
-    current_user: schemas.User = Depends(security.get_current_user)
-):
-    all_companies = db.query(models.Empresa).all()
-    if not all_companies:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Nenhuma empresa encontrada no sistema."
-        )
-
-    scored_companies = []
-    normalized_query = unidecode(query).lower()
-    query_tokens = [
-        stemmer.stem(token)
-        for token in word_tokenize(normalized_query, language='portuguese')
-        if token and token not in stop_words_pt
-    ]
-    
-    if not query_tokens:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Sua pesquisa não contém palavras relevantes."
-        )
-
-    for company in all_companies:
-        search_text = f"{company.nome_da_empresa} {company.solucao} {company.setor_principal} {company.setor_secundario}"
-        
-        normalized_search_text = unidecode(search_text).lower()
-        search_tokens = [
-            stemmer.stem(token)
-            for token in word_tokenize(normalized_search_text, language='portuguese')
-            if token and token not in stop_words_pt
-        ]
-        
-        match_score = 0
-        for q_token in query_tokens:
-            for s_token in search_tokens:
-                token_fuzz_score = fuzz.ratio(q_token, s_token)
-                if token_fuzz_score > 80:
-                    match_score += token_fuzz_score
-        
-        overall_score = fuzz.token_set_ratio(
-            ' '.join(search_tokens), ' '.join(query_tokens)
-        )
-        final_score = (match_score + overall_score) / 2 if (match_score + overall_score) > 0 else 0
-        
-        if final_score > 70:
-            scored_companies.append({'company': company, 'score': final_score})
-    
-    scored_companies.sort(key=lambda x: x['score'], reverse=True)
-    
-    results = [item['company'] for item in scored_companies]
-
-    if not results:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Nenhuma startup encontrada com a sua pesquisa."
-        )
-    
-    return results
-
-
-@app.get("/filtered_search", response_model=List[schemas.Empresa], status_code=status.HTTP_200_OK)
-def filtered_search_companies(
-    query: str,
-    fase: Optional[str] = None,
-    db: Session = Depends(get_db),
-    current_user: schemas.User = Depends(security.get_current_user)
-):
-    all_companies = db.query(models.Empresa).all()
-    if not all_companies:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Nenhuma empresa encontrada no sistema."
-        )
-
-    scored_companies = []
-    normalized_query = unidecode(query).lower()
-
-    if not normalized_query.strip() and fase:
-
-        filtered_companies_by_phase = [
-            comp for comp in all_companies if comp.fase_da_startup == fase
-        ]
-        if not filtered_companies_by_phase:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Nenhuma startup encontrada com a sua pesquisa."
-            )
-        return filtered_companies_by_phase
-
-    for company in all_companies:
-        search_text = f"{company.nome_da_empresa} {company.solucao} {company.setor_principal} {company.setor_secundario}"
-        normalized_search_text = unidecode(search_text).lower()
-        
-        final_score = fuzz.token_set_ratio(normalized_search_text, normalized_query)
-        
-        if final_score > 70:
-            scored_companies.append({'company': company, 'score': final_score})
-    
-    scored_companies.sort(key=lambda x: x['score'], reverse=True)
-    
-
-    if fase:
-        scored_companies = [item for item in scored_companies if item['company'].fase_da_startup == fase]
-
-    results = [item['company'] for item in scored_companies]
-
-    if not results:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Nenhuma startup encontrada com a sua pesquisa."
-        )
-    
-    return results
-
 
 @app.get("/optimized_search", response_model=List[schemas.Empresa], status_code=status.HTTP_200_OK)
 def optimized_search_companies(
     query: str,
     fase: Optional[str] = None,
-    db: Session = Depends(get_db),
     current_user: schemas.User = Depends(security.get_current_user)
 ):
-    global tfidf_vectorizer, company_vectors, all_companies_list
+    global search_engine_instance
     
-    if tfidf_vectorizer is None or company_vectors is None or all_companies_list is None:
-        return [c for c in db.query(models.Empresa).limit(5).all()] 
+    if search_engine_instance is None:
+        raise HTTPException(
+             status_code=status.HTTP_503_SERVICE_UNAVAILABLE, 
+             detail="O serviço de busca ainda não foi inicializado ou falhou ao carregar o índice."
+        )
 
-    normalized_query = unidecode(query).lower()
-    
-    query_vector = tfidf_vectorizer.transform([normalized_query])
-    
-    cosine_scores = cosine_similarity(query_vector, company_vectors).flatten()
-    
-    scored_companies = []
-    
-    RELEVANCE_THRESHOLD = 0.05 
-    
-    for i, score in enumerate(cosine_scores):
-        company = all_companies_list[i]
-        
-        if score < RELEVANCE_THRESHOLD: 
-            continue
-            
-        if fase and company.fase_da_startup != fase:
-            continue
+    results = search_engine_instance.optimized_search(query=query, fase=fase)
 
-        
-        company_raw_text = f"{company.nome_da_empresa} {company.solucao} {company.setor_principal} {company.setor_secundario}"
-        
-        fuzzy_tolerance_score = fuzz.token_set_ratio(unidecode(company_raw_text).lower(), normalized_query)
-        
-        
-        tf_idf_weighted = score * 100 
-        
-        fuzzy_bonus = fuzzy_tolerance_score * 0.40 
-        
-        final_score = tf_idf_weighted + fuzzy_bonus
-        
-        if final_score > 25.0: 
-              scored_companies.append({'company': company, 'score': final_score})
+    if not results:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Nenhuma startup encontrada com a sua pesquisa."
+        )
     
-    scored_companies.sort(key=lambda x: x['score'], reverse=True)
-    
-    results = [item['company'] for item in scored_companies[:5]]
-
     return results
 
 if __name__ == "__main__":

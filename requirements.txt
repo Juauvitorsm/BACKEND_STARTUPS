@@ -17,3 +17,7 @@ passlib==1.7.4
 bcrypt==3.2.0
 cffi==2.0.0
 passlib==1.7.4
+pytest
+pytest-asyncio
+httpx 
+sqlalchemy-utils 

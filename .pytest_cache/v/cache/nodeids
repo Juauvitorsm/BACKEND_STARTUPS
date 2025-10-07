@@ -1,0 +1,8 @@
+[
+  "backend/tests/test_search_simple.py::test_optimized_search_logic_metrics[Teste 1: Busca AGROTECH (Deve achar #1 e #2)]",
+  "backend/tests/test_search_simple.py::test_optimized_search_logic_metrics[Teste 1: Busca AGROTECH (Deve achar #1)]",
+  "backend/tests/test_search_simple.py::test_optimized_search_logic_metrics[Teste 2: Busca TECH (Deve achar #2)]",
+  "backend/tests/test_search_simple.py::test_optimized_search_logic_metrics[Teste 3: Busca 3D/Manufatura (Deve achar #3)]",
+  "backend/tests/test_search_simple.py::test_optimized_search_logic_metrics[Teste 4: Busca por Fase (Deve achar #2)]",
+  "backend/tests/test_search_simple.py::test_optimized_search_logic_metrics[Teste 4: Busca por Software com Filtro de Fase Seed (Deve achar #2)]"
+]
