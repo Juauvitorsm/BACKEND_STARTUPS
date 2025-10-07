@@ -26,7 +26,10 @@ async def lifespan(app: FastAPI):
     
     print("Verificando e baixando recursos do NLTK...")
     try:
-        # AQUI, APENAS CONFIRMAMOS QUE O DOWNLOAD NECESSÁRIO OCORREU
+        nltk.download('punkt', quiet=True) 
+        nltk.download('stopwords', quiet=True)
+        nltk.download('rslp', quiet=True) 
+        
         print("Recursos do NLTK prontos com sucesso!")
         
         db = next(get_db())

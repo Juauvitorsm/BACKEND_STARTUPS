@@ -12,19 +12,16 @@ import inspect
 try:
     nltk.download('punkt', quiet=True)
     nltk.download('stopwords', quiet=True)
-    # Tenta forçar o download do recurso RSLP
     nltk.download('rslp', quiet=True)
 except Exception:
     pass
 
-# Função para inicializar os recursos que falham na importação
 def initialize_nlp_resources():
     global stemmer, stop_words_pt
     try:
         stemmer = RSLPStemmer()
         stop_words_pt = set(stopwords.words('portuguese'))
     except LookupError:
-        # Se falhar, é porque o recurso não foi encontrado. Tentamos novamente.
         nltk.download('rslp', quiet=True)
         stemmer = RSLPStemmer()
         stop_words_pt = set(stopwords.words('portuguese'))
