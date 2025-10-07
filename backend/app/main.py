@@ -26,7 +26,6 @@ async def lifespan(app: FastAPI):
     
     print("Verificando e baixando recursos do NLTK...")
     try:
-        # Downloads mantidos no lifespan para persistência no deploy
         nltk.download('punkt', quiet=True) 
         nltk.download('stopwords', quiet=True)
         nltk.download('rslp', quiet=True) 

@@ -26,15 +26,16 @@ def initialize_nlp_resources():
         stemmer = RSLPStemmer()
         stop_words_pt = set(stopwords.words('portuguese'))
     
+    # NOVAS STOP WORDS: 'peça' ('peca'), 'faça' (stem: 'faz'), e termos de query
     CORP_AND_COMMON_STOP_WORDS = {'empresa', 'ltda', 's.a', 'eireli', 'companhia', 'solucoes', 'inovacao', 'tecnologia', 'group', 'grupo', 'de', 'a', 'o', 'e', 'do', 'da', 'dos', 'as', 'os', 
-        'um', 'uma', 'uns', 'umas', 'para', 'na', 'no', 'em', 'por', 'foco', 'quer', 'busco', 'ramo', 'com', 'eu', 'tu', 'ele', 'ela', 'documento', 'fazer', 'quero', 'um', 'peca'}
+        'um', 'uma', 'uns', 'umas', 'para', 'na', 'no', 'em', 'por', 'foco', 'quer', 'busco', 'ramo', 'com', 'eu', 'tu', 'ele', 'ela', 'documento', 'fazer', 'quero', 'um', 'peca', 'faz', 'que'}
     stop_words_pt.update(CORP_AND_COMMON_STOP_WORDS)
     
 initialize_nlp_resources()
 
 def custom_tokenizer(text):
     text = unidecode(text).lower()
-    tokens = wordpunct_tokenize(text) # Usa wordpunct_tokenize
+    tokens = wordpunct_tokenize(text)
     final_tokens = []
     for t in tokens:
         if t in stop_words_pt or len(t) <= 1:
@@ -91,7 +92,7 @@ class SearchEngine:
             fuzzy_bonus = fuzzy_tolerance_score * 0.50 
             final_score = tf_idf_weighted + fuzzy_bonus
             
-            if final_score > 45.0: 
+            if final_score > 70.0: 
                 scored_companies.append({'company': company, 'score': final_score})
         
         scored_companies.sort(key=lambda x: x['score'], reverse=True)
