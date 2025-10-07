@@ -10,24 +10,30 @@ from fuzzywuzzy import fuzz
 import inspect
 
 try:
-    if not inspect.isclass(RSLPStemmer):
-        nltk.download('punkt', quiet=True)
-        nltk.download('stopwords', quiet=True)
-        nltk.download('rslp', quiet=True)
-except Exception:
     nltk.download('punkt', quiet=True)
     nltk.download('stopwords', quiet=True)
+    # Tenta forçar o download do recurso RSLP
     nltk.download('rslp', quiet=True)
+except Exception:
+    pass
 
-
-
-CORP_AND_COMMON_STOP_WORDS = {'empresa', 'ltda', 's.a', 'eireli', 'companhia', 'solucoes', 'inovacao', 'tecnologia', 'group', 'grupo', 'de', 'a', 'o', 'e', 'do', 'da', 'dos', 'as', 'os', 
-    'um', 'uma', 'uns', 'umas', 'para', 'na', 'no', 'em', 'por', 'foco', 'quer', 'busco', 'ramo', 'com', 'eu', 'tu', 'ele', 'ela', 'documento', 'fazer', 'quero', 'um', 'peca'} # Adicionado 'peca'
-
-stemmer = RSLPStemmer()
-stop_words_pt = set(stopwords.words('portuguese'))
-stop_words_pt.update(CORP_AND_COMMON_STOP_WORDS)
-
+# Função para inicializar os recursos que falham na importação
+def initialize_nlp_resources():
+    global stemmer, stop_words_pt
+    try:
+        stemmer = RSLPStemmer()
+        stop_words_pt = set(stopwords.words('portuguese'))
+    except LookupError:
+        # Se falhar, é porque o recurso não foi encontrado. Tentamos novamente.
+        nltk.download('rslp', quiet=True)
+        stemmer = RSLPStemmer()
+        stop_words_pt = set(stopwords.words('portuguese'))
+    
+    CORP_AND_COMMON_STOP_WORDS = {'empresa', 'ltda', 's.a', 'eireli', 'companhia', 'solucoes', 'inovacao', 'tecnologia', 'group', 'grupo', 'de', 'a', 'o', 'e', 'do', 'da', 'dos', 'as', 'os', 
+        'um', 'uma', 'uns', 'umas', 'para', 'na', 'no', 'em', 'por', 'foco', 'quer', 'busco', 'ramo', 'com', 'eu', 'tu', 'ele', 'ela', 'documento', 'fazer', 'quero', 'um', 'peca'}
+    stop_words_pt.update(CORP_AND_COMMON_STOP_WORDS)
+    
+initialize_nlp_resources()
 
 def custom_tokenizer(text):
     text = unidecode(text).lower()
@@ -70,14 +76,11 @@ class SearchEngine:
         cosine_scores = cosine_similarity(query_vector, self.company_vectors).flatten()
         
         scored_companies = []
-        
-
-        RELEVANCE_THRESHOLD = 0.015 
+        RELEVANCE_THRESHOLD = 0.015
 
         for i, score in enumerate(cosine_scores):
             company = self.all_companies_list[i]
             
-
             if score < RELEVANCE_THRESHOLD: 
                 continue
                 
@@ -91,7 +94,6 @@ class SearchEngine:
             fuzzy_bonus = fuzzy_tolerance_score * 0.50 
             final_score = tf_idf_weighted + fuzzy_bonus
             
-
             if final_score > 45.0: 
                 scored_companies.append({'company': company, 'score': final_score})
         
