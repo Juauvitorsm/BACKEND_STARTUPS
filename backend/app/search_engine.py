@@ -1,7 +1,7 @@
 import nltk
 from unidecode import unidecode
 from nltk.corpus import stopwords
-from nltk.tokenize import word_tokenize
+from nltk.tokenize import wordpunct_tokenize
 from nltk.stem import RSLPStemmer 
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
@@ -34,7 +34,7 @@ initialize_nlp_resources()
 
 def custom_tokenizer(text):
     text = unidecode(text).lower()
-    tokens = word_tokenize(text) # CORREÇÃO AQUI: Sem 'language=portuguese'
+    tokens = wordpunct_tokenize(text) # Usa wordpunct_tokenize
     final_tokens = []
     for t in tokens:
         if t in stop_words_pt or len(t) <= 1:
