@@ -1,4 +1,7 @@
 
+chmod +x ./start.sh
+
+
 echo "Configurando NLTK..."
 python -c "import nltk; nltk.download('punkt', quiet=True); nltk.download('stopwords', quiet=True); nltk.download('rslp', quiet=True)"
 
