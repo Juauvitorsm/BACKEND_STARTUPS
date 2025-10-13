@@ -21,4 +21,3 @@ pytest
 pytest-asyncio
 httpx 
 sqlalchemy-utils 
-# issoeumteste
