@@ -1,7 +1,7 @@
 FROM python:3.11-slim
 
 ENV NLTK_DATA=/app/nltk_data
-ENV PORT 8000
+
 
 WORKDIR /app
 
