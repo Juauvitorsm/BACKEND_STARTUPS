@@ -16,4 +16,5 @@ RUN mkdir -p ${NLTK_DATA} \
 
 COPY . .
 
-CMD ["uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+ENTRYPOINT ["/bin/sh", "-c"]
+CMD ["uvicorn backend.app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
